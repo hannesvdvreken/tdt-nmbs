@@ -10,7 +10,7 @@ class NMBSLiveboard extends AReader{
 			"date" => "date in 'Ymd' format (default: today)",
 			"after" => "hour in 'H:i' format (default: now)",
 			"limit" => "limit number of trips returned",
-			"da" => "departing or arriving ('D' or 'A'), default: 'A'"
+			"da" => "departing or arriving ('D' or 'A'), default: 'D'"
 		];
 	}
 
@@ -52,16 +52,25 @@ class NMBSLiveboard extends AReader{
 		$config = require_once( __DIR__ .'/config.php');
 
 		$hosts = implode(',',$config['db_hosts']);
-		$moniker = "mongodb://" . $config['db_username'] . ":" . $config['db_passwd'] . "@$hosts/" . $config['db_name'];
+		if (isset($config['db_username']) && isset($config['db_passwd']))
+		{
+			$credentials = $config['db_username'] . ":" . $config['db_passwd'] . "@";
+		}
+		else
+		{
+			$credentials = "";
+		}
+
+		$moniker = "mongodb://$credentials$hosts/" . $config['db_name'];
 		
 		$m = new \Mongo($moniker);
 		$db = $m->{$config['db_name']};
 
 		/* criteria */
 
-		$criteria[] = ['sid'=>$this->stop_id];
+		$criteria[] = ['sid'=> (integer)$this->stop_id];
 		$criteria[] = ['agency'=>'NMBS-SNCB'];
-		$criteria[] = ['date' => $this->date];
+		$criteria[] = ['date' => (integer)$this->date];
 
 		if (isset($this->after))
 		{
@@ -85,15 +94,13 @@ class NMBSLiveboard extends AReader{
 		$pipeline[] = ['$limit' => $this->limit ];
 		
 		$result = $db->trips->aggregate($pipeline)['result'];
+
 		foreach ($result as &$trip)
-		{	
-			foreach (array_keys($trip['stops']) as $key ) {
-				$trip[$key] = $trip['stops'][$key];
-			}
-			unset($trip['stops']);
+		{
 			unset($trip['_id']);
 			unset($trip['sequence']);
 		}
+
 		return $result;
 	}
 

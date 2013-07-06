@@ -23,7 +23,16 @@ class NMBSVehicle extends AReader{
 		$config = require_once( __DIR__ .'/config.php');
 
 		$hosts = implode(',',$config['db_hosts']);
-		$moniker = "mongodb://" . $config['db_username'] . ":" . $config['db_passwd'] . "@$hosts/" . $config['db_name'];
+		if (isset($config['db_username']) && isset($config['db_passwd']))
+		{
+			$credentials = $config['db_username'] . ":" . $config['db_passwd'] . "@";
+		}
+		else
+		{
+			$credentials = "";
+		}
+
+		$moniker = "mongodb://$credentials$hosts/" . $config['db_name'];
 		
 		$m = new \Mongo($moniker);
 		$db = $m->{$config['db_name']};
@@ -31,7 +40,7 @@ class NMBSVehicle extends AReader{
 		/* build query */
 		$this->date = (isset($this->date) ? $this->date : date('Ymd',time())) ;
 
-		$result = $db->trips->aggregate([['$match'=>['date'=> $this->date, 'tid'=> $this->tid]],['$sort'=>['sequence'=>1]]])['result'];
+		$result = $db->trips->aggregate([['$match'=>['date'=> (integer)$this->date, 'tid'=> (integer)$this->tid]],['$sort'=>['sequence'=>1]]])['result'];
 
 		foreach ($result as &$stop) {
 			unset($stop['_id']);
