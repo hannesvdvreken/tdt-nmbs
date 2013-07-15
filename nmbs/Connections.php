@@ -24,6 +24,7 @@ class NMBSConnections extends AReader{
 	}
 
 	public function read(){
+
 		if (!$this->set_default_vars()) {
 			return array();
 		}
@@ -47,8 +48,21 @@ class NMBSConnections extends AReader{
 		$db = $m->{$config['db_name']};
 		
 		// get data from mongo
-		$dep = $db->stops->findOne(array('sid' => $this->stop_id_dep));
-		$arr = $db->stops->findOne(array('sid' => $this->stop_id_arr));
+		$stops_data = iterator_to_array($db->stops->find(array('nmbs_sid' => array('$exists' => true))));
+		
+		// prepare
+		$nmbs_stops = array();
+		$railtime_stops = array();
+
+		// convert
+		foreach ($stops_data as &$s) {
+			// build
+			$railtime_stops[$s['sid']] = $s;
+			$nmbs_stops[$s['nmbs_sid']] = $s;
+		}
+
+		$dep = $railtime_stops[$this->stop_id_dep];
+		$arr = $railtime_stops[$this->stop_id_arr];
 
 		// not possible to make route if no nmbs_sid known
 		if ((string)$dep['_id'] == (string)$arr['_id'] || !isset($dep['nmbs_sid']) || !isset($arr['nmbs_sid'])){
@@ -58,9 +72,9 @@ class NMBSConnections extends AReader{
 		$curl = new Curl();
 		$url = 'http://hari.b-rail.be/Hafas/bin/extxml.exe';
 
-		$b = $this->da == 'A' ? 0 : $this->limit ;
-		$f = $this->da == 'D' ? 0 : $this->limit ;
-		$a = $this->da == 'A' ? 0 : 1 ;
+		$b = $this->da == 'D' ? 0 : $this->limit ;
+		$f = $this->da == 'A' ? 0 : $this->limit ;
+		$a = $this->da == 'D' ? 0 : 1 ;
 
 		$xml = '<?xml version="1.0 encoding="iso-8859-1"?>
 				<ReqC ver="1.1" prod="iRail" lang="nl">
@@ -116,14 +130,34 @@ class NMBSConnections extends AReader{
 				$tid       = (integer) reset($section->Journey->JourneyAttributeList->JourneyAttribute[2]->Attribute->AttributeVariant->Text);
 
 				// grab some data from datastore
-				$departure = $db->stops->findOne(array('nmbs_sid' => $departure), array('nmbs_sid' => 0, '_id' => 0));
-				$arrival   = $db->stops->findOne(array('nmbs_sid' => $arrival),   array('nmbs_sid' => 0, '_id' => 0));
+				$departure = $nmbs_stops[$departure];
+				$arrival   = $nmbs_stops[$arrival];
+
+				// edit fields
+				$departure['sid'] = (integer) $departure['sid'];
+				$arrival['sid']   = (integer) $arrival['sid'];
+				unset($departure['_id']);
+				unset($departure['nmbs_sid']);
+				unset($arrival['_id']);
+				unset($arrival['nmbs_sid']);
+
+				// build query
+				$query = array(
+					'date' => (integer)$this->date, 
+					'tid' => $tid,
+					'sid' => array('$in' => array($departure['sid'], $arrival['sid']))
+				);
+
+				// perform
+				$trip_data = iterator_to_array($db->trips->find(
+					$query
+				));
+
+				// prepare
 				$trip = array();
 
-				$trip_data = iterator_to_array($db->trips->find(array('tid' => $tid, 'date' => (integer)$this->date)));
-
 				// get data
-				foreach ($trip_data as $s) 
+				foreach ($trip_data as $s)
 				{
 					// get general trip info
 					if ($s == reset($trip_data))
@@ -164,7 +198,6 @@ class NMBSConnections extends AReader{
 					}
 				}
 
-
 				$new_section = array();
 				$new_section['departure'] = $departure;
 				$new_section['trip'] = $trip;
@@ -201,7 +234,7 @@ class NMBSConnections extends AReader{
 		$this->da = isset($this->da) ? $this->da : 'D';
 
 		// limit: default 10
-		$this->limit = isset($this->limit) ? intval($this->limit) : 10;
+		$this->limit = isset($this->limit) ? max(intval($this->limit), 6) : 6;
 
 		return true;
 	}

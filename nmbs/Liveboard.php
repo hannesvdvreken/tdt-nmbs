@@ -68,20 +68,20 @@ class NMBSLiveboard extends AReader{
 
 		/* criteria */
 
-		$criteria[] = ['sid'=> (integer)$this->stop_id];
-		$criteria[] = ['agency'=>'NMBS-SNCB'];
-		$criteria[] = ['date' => (integer)$this->date];
+		$criteria['date']   = (integer)$this->date;
+		$criteria['sid']    = (integer)$this->stop_id;
+		$criteria['agency'] = 'NMBS-SNCB';
 
 		if (isset($this->after))
 		{
 			if (preg_match('/^d$/i', $this->da))
-				$criteria[] = ['departure_time' => ['$gte'=> $this->after ]];
+				$criteria['departure_time'] = array('$gte'=> $this->after);
 			else
-				$criteria[] = ['arrival_time' => ['$gte'=> $this->after ]];
+				$criteria['arrival_time'] = array('$gte'=> $this->after);
 		}
 
 		/* query */
-		$pipeline[] = ['$match' => [ '$and' => $criteria ]];
+		$pipeline[] = ['$match' => $criteria ];
 		
 		/* sort on the right key */
 		if (preg_match('/^d$/i', $this->da))
