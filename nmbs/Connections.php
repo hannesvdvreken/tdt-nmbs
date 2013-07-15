@@ -95,25 +95,85 @@ class NMBSConnections extends AReader{
 
 		// create xml
 		$xml = new SimpleXMLElement($result);
+
 		$journeys = array();
 		$stop_data = array(
 			$dep['nmbs_sid'] => $dep,
 			$arr['nmbs_sid'] => $arr,
 		);
 
+		// helper
+		$attributes = "@attributes";
+
 		foreach ($xml->ConRes->ConnectionList->Connection as $journey_data) {
 			$sections = array();
 
-			foreach ($journey_data->ConSectionList->ConSection as $sections) {
-				//
-			}
+			foreach ($journey_data->ConSectionList->ConSection as $section) 
+			{
+				// parse from tree
+				$departure = reset($section->Departure->BasicStop->Station)['externalStationNr'];
+				$arrival   = reset($section->Arrival->BasicStop->Station)['externalStationNr'];
+				$tid       = (integer) reset($section->Journey->JourneyAttributeList->JourneyAttribute[2]->Attribute->AttributeVariant->Text);
 
-			$departure = reset($journey->Departure->BasicStop->Station);
-			$dep_nmbs_sid = $departure['externalStationNr'];
-			$arrival = reset($journey->Arrival->BasicStop->Station);
-			$arr_nmbs_sid = $arrival['externalStationNr'];
+				// grab some data from datastore
+				$departure = $db->stops->findOne(array('nmbs_sid' => $departure), array('nmbs_sid' => 0, '_id' => 0));
+				$arrival   = $db->stops->findOne(array('nmbs_sid' => $arrival),   array('nmbs_sid' => 0, '_id' => 0));
+				$trip = array();
+
+				$trip_data = iterator_to_array($db->trips->find(array('tid' => $tid, 'date' => (integer)$this->date)));
+
+				// get data
+				foreach ($trip_data as $s) 
+				{
+					// get general trip info
+					if ($s == reset($trip_data))
+					{
+						$trip['date']     = $s['date'];
+						$trip['origin']   = $s['origin'];
+						$trip['headsign'] = $s['headsign'];
+						$trip['tid']      = $s['tid'];
+						$trip['type']     = $s['type'];
+						$trip['route']    = $s['route'];
+						$trip['agency']   = $s['agency'];
+					}
+
+					// enhance departure object
+					if ($s['sid'] == $departure['sid'])
+					{
+						if (isset($s['departure_time']))
+							$departure['departure_time']  = $s['departure_time'];
+						if (isset($s['departure_delay']))
+							$departure['departure_delay'] = $s['departure_delay'];
+						if (isset($s['cancelled']))
+							$departure['cancelled'] = $s['cancelled'];
+						if (isset($s['platform']))
+							$departure['platform']  = $s['platform'];
+					}
+
+					// enhance arrival object
+					if ($s['sid'] == $arrival['sid'])
+					{
+						if (isset($s['arrival_time']))
+							$arrival['arrival_time']  = $s['arrival_time'];
+						if (isset($s['arrival_delay']))
+							$arrival['arrival_delay'] = $s['arrival_delay'];
+						if (isset($s['cancelled']))
+							$arrival['cancelled'] = $s['cancelled'];
+						if (isset($s['platform']))
+							$arrival['platform']  = $s['platform'];
+					}
+				}
+
+
+				$new_section = array();
+				$new_section['departure'] = $departure;
+				$new_section['trip'] = $trip;
+				$new_section['arrival'] = $arrival;
+
+				$sections[] = $new_section;
+			}
 			
-			return [$arr_nmbs_sid, $dep_nmbs_sid, $journey,];
+			$journeys[] = $sections;
 		}
 
 		// get route
