@@ -152,6 +152,8 @@ class NMBSConnections extends AReader{
 				$trip_data = iterator_to_array($db->trips->find(
 					$query
 				));
+				
+				if (!$trip_data || empty($trip_data)) continue 2; // 2 levels
 
 				// prepare
 				$trip = array();
