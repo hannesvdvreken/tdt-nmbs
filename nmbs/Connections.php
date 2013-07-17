@@ -116,11 +116,10 @@ class NMBSConnections extends AReader{
 			$arr['nmbs_sid'] => $arr,
 		);
 
-		// helper
-		$attributes = "@attributes";
-
 		foreach ($xml->ConRes->ConnectionList->Connection as $journey_data) {
 			$sections = array();
+
+			$date = (integer)$journey_data->Overview->Date;
 
 			foreach ($journey_data->ConSectionList->ConSection as $section) 
 			{
@@ -128,6 +127,9 @@ class NMBSConnections extends AReader{
 				$departure = reset($section->Departure->BasicStop->Station)['externalStationNr'];
 				$arrival   = reset($section->Arrival->BasicStop->Station)['externalStationNr'];
 				$tid       = (integer) reset($section->Journey->JourneyAttributeList->JourneyAttribute[2]->Attribute->AttributeVariant->Text);
+
+				// look for date offset
+				$date += (integer)substr($section->Departure->BasicStop->Dep->Time, 1, 1);
 
 				// grab some data from datastore
 				$departure = $nmbs_stops[$departure];
@@ -143,7 +145,7 @@ class NMBSConnections extends AReader{
 
 				// build query
 				$query = array(
-					'date' => (integer)$this->date, 
+					'date' => $date, 
 					'tid' => $tid,
 					'sid' => array('$in' => array($departure['sid'], $arrival['sid']))
 				);
@@ -153,24 +155,26 @@ class NMBSConnections extends AReader{
 					$query
 				));
 
+
+				if (!$trip_data || empty($trip_data)) continue 2; // 2 levels
+
 				// prepare
 				$trip = array();
+
+				// get general trip info
+				$s = reset($trip_data);
+				
+				$trip['date']     = $s['date'];
+				$trip['origin']   = $s['origin'];
+				$trip['headsign'] = $s['headsign'];
+				$trip['tid']      = $s['tid'];
+				$trip['type']     = $s['type'];
+				$trip['route']    = $s['route'];
+				$trip['agency']   = $s['agency'];
 
 				// get data
 				foreach ($trip_data as $s)
 				{
-					// get general trip info
-					if ($s == reset($trip_data))
-					{
-						$trip['date']     = $s['date'];
-						$trip['origin']   = $s['origin'];
-						$trip['headsign'] = $s['headsign'];
-						$trip['tid']      = $s['tid'];
-						$trip['type']     = $s['type'];
-						$trip['route']    = $s['route'];
-						$trip['agency']   = $s['agency'];
-					}
-
 					// enhance departure object
 					if ($s['sid'] == $departure['sid'])
 					{
